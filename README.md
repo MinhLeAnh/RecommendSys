@@ -1,5 +1,5 @@
 ## Cách chạy:  
-Bước 1: Kéo dự án về máy local dùng câu lệnh git clone 
+Bước 1: Kéo dự án về máy local dùng câu lệnh git clone https://github.com/MinhLeAnh/RecommendSys.git
 Bước 2: Tải các thư viện cần thiết
 `pip install requirement.txt`   
 Bước 3: Sửa các chuỗi kết nối trong file host.py  
