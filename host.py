@@ -15,7 +15,6 @@ from sklearn.model_selection import train_test_split
 
 app = FastAPI()
 
-
 import os
 from datetime import datetime
 
@@ -137,6 +136,14 @@ def train_models_if_needed():
         FROM Courses
         """
         df_courses = pd.read_sql(query_courses, conn)
+
+        query = """
+        SELECT UserId, CourseId, EnrollmentStatus
+        FROM dbo.UserCourses
+        """
+
+        df = pd.read_sql(query, conn)
+
         conn.close()
 
         # Xử lý dữ liệu văn bản khóa học
@@ -160,22 +167,6 @@ def train_models_if_needed():
             workers=4
         )
 
-        #______________________________
-        conn = pyodbc.connect(
-            'DRIVER={ODBC Driver 17 for SQL Server};'
-            'SERVER=LAPTOP-0SMFMLRQ;'
-            'DATABASE=CourseAI;'
-            'UID=test;'
-            'PWD=1234'
-        )
-
-        query = """
-        SELECT UserId, CourseId, EnrollmentStatus
-        FROM dbo.UserCourses
-        """
-
-        df = pd.read_sql(query, conn)
-
 
         # Xử lý dữ liệu người dùng và khóa học
         df['EnrollmentStatus'] = df['EnrollmentStatus'].apply(lambda x: 1 if x == 2 else 0)
@@ -194,7 +185,7 @@ def train_models_if_needed():
 
         # Chia dữ liệu
         X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
-
+ 
         # Xây dựng mô hình DNN (tối ưu)
         model = tf.keras.models.Sequential([
             tf.keras.layers.InputLayer(input_shape=(2,)),
@@ -251,6 +242,7 @@ def train_models_if_needed():
 
 @app.get("/recommend/similar")
 def recommend_similar_courses(course_id: str, top_n: int = 5):
+    course_id = course_id.upper()
     course = df_courses[df_courses['Id'] == course_id]
     if course.empty:
         raise HTTPException(status_code=404, detail="Khóa học không tồn tại.")
@@ -273,7 +265,11 @@ def recommend_similar_courses(course_id: str, top_n: int = 5):
 
 @app.get("/recommend/personal")
 def recommend_personal_courses(user_id: str, top_n: int = 5):
+    user_id = user_id.upper()
+    if user_id not in user_encoder.classes_:
+        train_models_if_needed()
     user_encoded = user_encoder.transform([user_id])[0]
+
     courses = np.setdiff1d(np.arange(df_users['CourseId'].nunique()), df_users[df_users['UserId'] == user_encoded]['CourseId'])
 
     inputs = np.array([[user_encoded, course] for course in courses])
