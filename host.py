@@ -12,6 +12,7 @@ import nltk
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+import itertools
 
 app = FastAPI()
 
@@ -168,24 +169,49 @@ def train_models_if_needed():
         )
 
 
-        # Xử lý dữ liệu người dùng và khóa học
-        df['EnrollmentStatus'] = df['EnrollmentStatus'].apply(lambda x: 1 if x == 2 else 0)
+        #  Truy vấn dữ liệu người dùng và khóa học
+        query = "SELECT UserId, CourseId, EnrollmentStatus FROM dbo.UserCourses"
+        df_enrollments = pd.read_sql(query, conn)
+        conn.close()
+
+        # Đặt EnrollmentStatus cho khóa học chưa đăng ký là 0
+        df_enrollments['EnrollmentStatus'] = df_enrollments['EnrollmentStatus'].fillna(0).apply(lambda x: 1 if x == 2 else 0)
 
         # Mã hóa UserId và CourseId
         user_encoder = LabelEncoder()
-        df['UserId'] = user_encoder.fit_transform(df['UserId'])
-
         course_encoder = LabelEncoder()
-        df['CourseId'] = course_encoder.fit_transform(df['CourseId'])
 
+        df_enrollments['UserId'] = user_encoder.fit_transform(df_enrollments['UserId'])
+        df_enrollments['CourseId'] = course_encoder.fit_transform(df_enrollments['CourseId'])
+
+        # Tạo tất cả kết hợp UserId - CourseId (bao gồm cả các khóa học chưa đăng ký)
+        all_users = df_enrollments['UserId'].unique()
+        all_courses = df_enrollments['CourseId'].unique()
+        all_combinations = pd.DataFrame(list(itertools.product(all_users, all_courses)), columns=['UserId', 'CourseId'])
+
+        # Gán trạng thái đăng ký cho các khóa học (0 cho khóa học chưa đăng ký)
+        df = pd.merge(all_combinations, df_enrollments[['UserId', 'CourseId', 'EnrollmentStatus']],
+                    on=['UserId', 'CourseId'], how='left')
+        df['EnrollmentStatus'] = df['EnrollmentStatus'].fillna(0)
+
+        # Định dạng lại cột dữ liệu
         X = df[['UserId', 'CourseId']]
         y = df['EnrollmentStatus']
+
+        # Chuẩn hóa dữ liệu
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
         # Chia dữ liệu
         X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
- 
+
+
+        # Tạo ma trận UserId x CourseId
+        df_pivot = df.pivot(index='UserId', columns='CourseId', values='EnrollmentStatus')
+
+        # Xuất ma trận ra file CSV
+        df_pivot.to_csv('user_course_matrix.csv', index=True)
+
         # Xây dựng mô hình DNN (tối ưu)
         model = tf.keras.models.Sequential([
             tf.keras.layers.InputLayer(input_shape=(2,)),
@@ -207,18 +233,17 @@ def train_models_if_needed():
             metrics=['accuracy']
         )
 
-        # Huấn luyện mô hình
+        # 🚀 Huấn luyện mô hình
         early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
         reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, min_lr=1e-6)
 
         history = model.fit(
             X_train, y_train,
-            epochs=10, 
+            epochs=50,
             batch_size=32,
             validation_split=0.2,
             callbacks=[early_stopping, reduce_lr]
         )
-
         #lưu model__________________________________
         # Đường dẫn lưu model
         model_dir = "saved_models"
