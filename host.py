@@ -116,8 +116,6 @@ course_encoder = LabelEncoder()
 df_users['UserId'] = user_encoder.fit_transform(df_users['UserId'])
 df_users['CourseId'] = course_encoder.fit_transform(df_users['CourseId'])
 
-
-
 # train lại nếu cần
 def train_models_if_needed():
     if is_data_updated():
@@ -168,7 +166,6 @@ def train_models_if_needed():
             workers=4
         )
 
-
         #  Truy vấn dữ liệu người dùng và khóa học
         query = "SELECT UserId, CourseId, EnrollmentStatus FROM dbo.UserCourses"
         df_enrollments = pd.read_sql(query, conn)
@@ -212,7 +209,7 @@ def train_models_if_needed():
         # Xuất ma trận ra file CSV
         df_pivot.to_csv('user_course_matrix.csv', index=True)
 
-        # Xây dựng mô hình DNN (tối ưu)
+        # Xây dựng mô hình DNN
         model = tf.keras.models.Sequential([
             tf.keras.layers.InputLayer(input_shape=(2,)),
             tf.keras.layers.Dense(256, activation='relu'),
@@ -233,7 +230,7 @@ def train_models_if_needed():
             metrics=['accuracy']
         )
 
-        # 🚀 Huấn luyện mô hình
+        # Huấn luyện mô hình
         early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
         reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, min_lr=1e-6)
 
